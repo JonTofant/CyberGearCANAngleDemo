@@ -59,15 +59,12 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 
 
-
-
 CAN_TxHeaderTypeDef pTxHeader;
 CAN_RxHeaderTypeDef pRxHeader;
 CAN_FilterTypeDef sFilterConfig;
 uint32_t pTxMailbox;
 
 uint8_t received_data[8];
-volatile float angle_reference = 0.0f;
 // UART
 char RxUARTBuffer[256]="";
 uint8_t RxUARTLength=0;
@@ -87,7 +84,9 @@ float kp          = 30.0f;  // Example gain
 float kd          = 1.0f;   // Example gain
 
 
-volatile float targetAngle = 1.0f;  // initial target angle in radians
+// initial target angle. Value should be 6.28... for a full rotation
+volatile float targetAngle = 1.0f;
+
 
 // We'll define prototypes for param writes, enabling motor, etc.
 // We'll place the actual code in USER CODE BEGIN 4, but these must be declared first.
@@ -102,7 +101,6 @@ HAL_StatusTypeDef motorStop(uint8_t hostID, uint8_t motorID);
 void testMotor(void);
 
 // We'll do a simple function that sets position mode and moves the motor
-void moveMotorToAngle(float angle_radians, uint8_t hostID, uint8_t motorID);
 
 HAL_StatusTypeDef motorControlMode(uint8_t hostID, uint8_t motorID,
                                    float torque, float position,
@@ -177,7 +175,7 @@ int main(void)
   __HAL_UART_ENABLE_IT(&huart2, UART_IT_TC);
   __HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
   HAL_UART_Receive_IT(&huart2, &RxSingleByte, 1);
-  char buffer[11] = "HelloWorld\n";
+  char buffer[11] = "CyberGear Serial CAN Receiver\n";
   HAL_UART_Transmit_IT(&huart2,(uint8_t *) buffer, 11);
   // CAN
   // 1) Configure the CAN filter to accept *all* extended frames
@@ -213,13 +211,12 @@ int main(void)
 
 
 	  // 1) Clear fault
-	  clearMotorFault(0xFE, 0x7F);
-	  HAL_Delay(20);
+	  //clearMotorFault(0xFE, 0x7F);
+	  //HAL_Delay(20);
 
-	  motorEnable(0xFE, 0x7F);  // type=3
-	  HAL_Delay(10);
+	  //motorEnable(0xFE, 0x7F);  // type=3
+	  //HAL_Delay(10);
 
-	  //runMITLoop();
 	  testMotor();
   /* USER CODE END 2 */
 
@@ -228,61 +225,6 @@ int main(void)
 
   while (1)
   {
-	  /*
-	    if(toggle == 0)
-	    {
-	        angle = 1.0f;  // ~ 1 rad
-	        toggle = 1;
-	    }
-	    else
-	    {
-	        angle = -1.0f; // ~ -1 rad
-	        toggle = 0;
-	    }
-	   */
-	    // Move motor to angle
-	   // moveMotorToAngle(angle, /*hostID=*/0xFE, /*motorID=*/0x01);
-
-	    // Wait 2s
-	    //HAL_Delay(2000);
-	    // optionally stop the motor if you want
-	    // motorStop(0xFE, 0x01);
-	    // HAL_Delay(2000);
-	  /*------------------
-	   * ISKANJE ID MOTORJA
-	   * ----------------*/
-	  // Try every ID from 0..127
-		  /*for(uint8_t testID = 0; testID < 128; testID++)
-		  {
-		      getMotorDeviceID(0xFE, testID);   // type=0 request
-		      HAL_Delay(50);
-
-			  // Here you'd check a flag set in HAL_CAN_RxFifo0MsgPendingCallback
-			  // if we received a type=0 from ID 'testID'
-		      if (motorDetectedFlag) {
-			      foundMotorID = testID;
-			      break;
-			  }
-	  	  }*/
-      // Send continuous control frame
-     // motorControlMode(0xFE, 0xFE, torqueCmd, positionCmd, velocityCmd, kp, kd);
-
-     // HAL_Delay(10); // update at ~100 Hz
-
-
-	  /*--------------------
-	   * MOVING MOTOR
-	   ---------------------*/
-	  // e.g. move the motor to +1.0 rad
-	    //clearMotorFault(0xFE, 0xFE);
-	    //HAL_Delay(20);
-
-	    //moveMotorToAngle(+1.0f, 0xFE, 0xFE);
-	    //HAL_Delay(2000);
-
-	    //moveMotorToAngle(-1.0f, 0xFE, 0xFE);
-	    //HAL_Delay(2000);
-
 
     /* USER CODE END WHILE */
 
@@ -593,104 +535,7 @@ HAL_StatusTypeDef getMotorDeviceID(uint8_t hostID, uint8_t motorID)
     return HAL_CAN_AddTxMessage(&hcan1, &txHeader, txData, &txMailbox);
 }
 
-HAL_StatusTypeDef motorControlMode(uint8_t hostID, uint8_t motorID,
-                                   float torque, float position,
-                                   float velocity, float kp, float kd)
-{
-    CAN_TxHeaderTypeDef txHeader;
-    uint32_t txMailbox;
-    uint8_t txData[8];
 
-    // Build extended ID => (type=1 in bits28..24),
-    // plus (hostID<<8), plus (motorID).
-    uint32_t extId = ((uint32_t)1 << 24) // type=1
-                   | ((uint32_t)hostID << 8)
-                   | (uint32_t)motorID;
-
-    txHeader.ExtId = extId;
-    txHeader.IDE   = CAN_ID_EXT;      // extended
-    txHeader.RTR   = CAN_RTR_DATA;
-    txHeader.DLC   = 8;               // 8 data bytes
-    txHeader.TransmitGlobalTime = DISABLE;
-
-    // Convert each float to 16-bit
-    uint16_t t_u   = float_to_uint(torque,    T_MIN, T_MAX);
-    uint16_t p_u   = float_to_uint(position,  P_MIN, P_MAX);
-    uint16_t v_u   = float_to_uint(velocity,  V_MIN, V_MAX);
-    uint16_t kp_u  = float_to_uint(kp,        KP_MIN, KP_MAX);
-    uint16_t kd_u  = float_to_uint(kd,        KD_MIN, KD_MAX);
-
-    // The doc sometimes puts torque in the extended ID’s .data field
-    // but we can also store it in the first 2 data bytes if that’s how
-    // your firmware is laid out. The Xiaomi snippet is a bit contradictory
-    // so we’ll assume data[0..1]=position, data[2..3]=velocity, data[4..5]=kp,
-    // data[6..7]=kd, and the torque is placed in extID’s .data. For simplicity,
-    // let's do torque in data[0..1], or we can do the exact snippet style.
-
-    // For the EXACT snippet style:
-    // "txCanIdEx.data = float_to_uint(torque, T_MIN, T_MAX, 16);"
-    // That means bits [15..0] in the ID store torque, but in HAL we can’t easily do that
-    // So let's just store torque in data[0..1], then position in data[2..3], etc.:
-
-    txData[0] = (uint8_t)(t_u >> 8);
-    txData[1] = (uint8_t)(t_u & 0xFF);
-    txData[2] = (uint8_t)(p_u >> 8);
-    txData[3] = (uint8_t)(p_u & 0xFF);
-    txData[4] = (uint8_t)(v_u >> 8);
-    txData[5] = (uint8_t)(v_u & 0xFF);
-    txData[6] = (uint8_t)(kp_u >> 8);
-    txData[7] = (uint8_t)(kp_u & 0xFF);
-
-    // If your firmware actually expects the EXACT snippet’s layout:
-    // data[0..1] = position, data[2..3] = velocity, data[4..5] = kp, data[6..7] = kd
-    // then do that:
-    /*
-    txData[0] = (uint8_t)(p_u >> 8);
-    txData[1] = (uint8_t)(p_u & 0xFF);
-    txData[2] = (uint8_t)(v_u >> 8);
-    txData[3] = (uint8_t)(v_u & 0xFF);
-    txData[4] = (uint8_t)(kp_u >> 8);
-    txData[5] = (uint8_t)(kp_u & 0xFF);
-    txData[6] = (uint8_t)(kd_u >> 8);
-    txData[7] = (uint8_t)(kd_u & 0xFF);
-    */
-
-    return HAL_CAN_AddTxMessage(&hcan1, &txHeader, txData, &txMailbox);
-}
-
-
-/**
- * 1) run_mode=1 => position mode
- * 2) enable motor
- * 3) write loc_ref => angle in radians
- *
- * This is just a convenience wrapper that:
- *   - Puts motor in position mode
- *   - Immediately sends enable
- *   - Sends loc_ref to command the angle
- */
-void moveMotorToAngle(float angle_radians, uint8_t hostID, uint8_t motorID)
-{
-    // paramIndex=0x7005 => run_mode
-    uint8_t modeVal = 1; // 1 => position mode
-    writeParameter(0x7005, &modeVal, hostID, motorID);
-
-    // short delay so motor sees run_mode
-    HAL_Delay(10);
-
-    // enable motor
-    motorEnable(hostID, motorID);
-    HAL_Delay(10);
-
-    // paramIndex=0x7016 => loc_ref
-    writeParameter(0x7016, &angle_radians, hostID, motorID);
-}
-
-/**
- * Clear motor fault => type=4, data[0] = 1
- * This usually stops the motor if it's running, but importantly
- * also clears any existing fault condition so the motor can accept commands.
- */
 HAL_StatusTypeDef clearMotorFault(uint8_t hostID, uint8_t motorID)
 {
     CAN_TxHeaderTypeDef txHeader;
@@ -819,40 +664,19 @@ void serialWrite(char data[]){
 }
 
 void serialProcessRxData(){
-	// Process data
-	switch(RxUARTBuffer[0]){
-		case '1':
-			onFlag = 1;
-			HAL_CAN_AddTxMessage(&hcan1, &pTxHeader, (uint8_t *)&onFlag, &pTxMailbox);
-			break;
-		case '0':
-			onFlag = 0;
-			HAL_CAN_AddTxMessage(&hcan1, &pTxHeader, (uint8_t *)&onFlag, &pTxMailbox);
-			break;
-		case 'H':
-			serialWrite("Ok");
-			break;
-		default:
-			break;
-	}
-	RxUARTLength = 0;
+
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	if(huart->Instance == USART2){
-		if(RxSingleByte == '\n')
-		{
-			serialProcessRxData();
-		}else
-		{
-			RxUARTBuffer[RxUARTLength] = RxSingleByte;
-			RxUARTLength++;
-		}
-		HAL_UART_Receive_IT(&huart2, &RxSingleByte, 1);
+
 	}
 }
 
+/*
+ * Function used for MIT control.
+ */
 static uint16_t float_to_uint(float x, float x_min, float x_max)
 {
     // Clamp x into [x_min, x_max]
@@ -868,84 +692,7 @@ static uint16_t float_to_uint(float x, float x_min, float x_max)
     // but we can do something like:
     return (uint16_t)((offset * 65535.0f) / span + 0.5f);
 }
-HAL_StatusTypeDef motorControlFrame(
-    uint8_t  motorID,        // bits 7..0 in extended ID
-    float    torque,         // –12..+12 Nm
-    float    angle,          // e.g. –4..+4 rad
-    float    velocity,       // e.g. –30..+30 rad/s
-    float    kp,             // 0..500
-    float    kd              // 0..5
-)
-{
-    CAN_TxHeaderTypeDef txHeader;
-    uint32_t txMailbox;
-    uint8_t  txData[8];
 
-    // 1) Convert torque to 16-bit
-    uint16_t torque_u = float_to_uint(torque, -12.0f, 12.0f);
-
-    // 2) Build the extended ID:
-    // bits 28..24 => type=1
-    // bits 23..8  => torque_u
-    // bits 7..0   => motorID
-    uint32_t extId =
-        ((uint32_t)1 << 24)                // put "1" in bits 28..24
-      | ((uint32_t)torque_u & 0xFFFF) << 8 // put torque in bits 23..8
-      | ((uint32_t)motorID & 0xFF);        // put motorID in bits 7..0
-
-    txHeader.ExtId = extId;
-    txHeader.IDE   = CAN_ID_EXT;       // extended frame
-    txHeader.RTR   = CAN_RTR_DATA;
-    txHeader.DLC   = 8;               // 8 data bytes
-    txHeader.TransmitGlobalTime = DISABLE;
-/*
-    // 3) Scale angle, velocity, Kp, Kd for the data bytes
-    uint16_t angle_u    = float_to_uint(angle,    -4.0f, 4.0f);    // or whatever range your doc says
-    uint16_t velocity_u = float_to_uint(velocity, -30.0f, 30.0f);  // example range
-    uint16_t kp_u       = float_to_uint(kp,        0.0f, 500.0f);
-    uint16_t kd_u       = float_to_uint(kd,        0.0f, 5.0f);
-
-    // 4) Place them in the data bytes
-    // Byte0..1 => angle
-    txData[0] = (uint8_t)(angle_u >> 8);
-    txData[1] = (uint8_t)(angle_u & 0xFF);
-
-    // Byte2..3 => velocity
-    txData[2] = (uint8_t)(velocity_u >> 8);
-    txData[3] = (uint8_t)(velocity_u & 0xFF);
-
-    // Byte4..5 => Kp
-    txData[4] = (uint8_t)(kp_u >> 8);
-    txData[5] = (uint8_t)(kp_u & 0xFF);
-
-    // Byte6..7 => Kd
-    txData[6] = (uint8_t)(kd_u >> 8);
-    txData[7] = (uint8_t)(kd_u & 0xFF);
-    */
-    // We assume you want to match exactly Byte0..1 => angle, Byte2..3 => velocity, etc.
-    uint16_t p_u  = float_to_uint(angle,  -4.0f, 4.0f); // angle
-    uint16_t v_u  = float_to_uint(velocity,  -30.0f, 30.0f);
-    uint16_t kp_u = float_to_uint(kp,        0.0f, 500.0f);
-    uint16_t kd_u = float_to_uint(kd,        0.0f, 5.0f);
-
-    // Now place them in the correct order:
-    txData[0] = (uint8_t)(p_u >> 8);
-    txData[1] = (uint8_t)(p_u & 0xFF);
-
-    txData[2] = (uint8_t)(v_u >> 8);
-    txData[3] = (uint8_t)(v_u & 0xFF);
-
-    txData[4] = (uint8_t)(kp_u >> 8);
-    txData[5] = (uint8_t)(kp_u & 0xFF);
-
-    txData[6] = (uint8_t)(kd_u >> 8);
-    txData[7] = (uint8_t)(kd_u & 0xFF);
-
-
-    // 5) Transmit
-    return HAL_CAN_AddTxMessage(&hcan1, &txHeader, txData, &txMailbox);
-
-}
 
 /* USER CODE END 4 */
 
