@@ -76,12 +76,6 @@ uint16_t angle_u;
 volatile bool motorDetectedFlag = false;
 volatile uint8_t foundMotorID = 0xFF;
 
-// Desired command values
-float torqueCmd   = 0.0f;   // No feed-forward torque
-float positionCmd = 1.0f;   // Target angle, e.g., 1 rad
-float velocityCmd = 0.0f;   // No feed-forward velocity
-float kp          = 30.0f;  // Example gain
-float kd          = 1.0f;   // Example gain
 
 
 // initial target angle. Value should be 6.28... for a full rotation
