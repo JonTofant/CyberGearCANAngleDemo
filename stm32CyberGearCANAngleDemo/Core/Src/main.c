@@ -73,8 +73,8 @@ uint8_t onFlag = 0;
 float angle = 0.0f;
 int toggle = 0;
 uint16_t angle_u;
-volatile bool motorDetectedFlag = false;
-volatile uint8_t foundMotorID = 0xFF;
+
+
 
 
 
