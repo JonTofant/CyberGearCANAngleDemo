@@ -130,7 +130,6 @@ void serialWrite(char data[]);
 void serialProcessRxData();
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 static uint16_t float_to_uint(float x, float x_min, float x_max);
-void runMITLoop(void);
 
 /* USER CODE END PFP */
 
@@ -481,29 +480,7 @@ HAL_StatusTypeDef motorStop(uint8_t hostID, uint8_t motorID)
     return HAL_CAN_AddTxMessage(&hcan1, &txHeader, txData, &txMailbox);
 }
 
-void runMITLoop(void)
-{
-    // Clear any existing fault and enable the motor first.
-    clearMotorFault(0xFE, 0xFE);
-    HAL_Delay(20);
-    motorEnable(0xFE, 0xFE);
-    HAL_Delay(10);
 
-    // These values remain constant for now.
-    float torqueCmd   = 0.0f;   // No feed-forward torque
-    float velocityCmd = 0.0f;   // No feed-forward velocity
-    float kp          = 30.0f;  // Proportional gain
-    float kd          = 1.0f;   // Derivative gain
-
-
-
-    // Continuously update control commands at roughly 100Hz.
-    while (1)
-    {
-        motorControlMode(0xFE, 0x7F, torqueCmd, targetAngle, velocityCmd, kp, kd);
-        HAL_Delay(10);
-    }
-}
 
 
 
