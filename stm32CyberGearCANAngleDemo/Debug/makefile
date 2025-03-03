@@ -60,8 +60,8 @@ all: main-build
 main-build: CyberGearConfigurator.elf secondary-outputs
 
 # Tool invocations
-CyberGearConfigurator.elf CyberGearConfigurator.map: $(OBJS) $(USER_OBJS) C:\Users\tofan\Documents\CyberGearMIT_Demo\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "CyberGearConfigurator.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\tofan\Documents\CyberGearMIT_Demo\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="CyberGearConfigurator.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+CyberGearConfigurator.elf CyberGearConfigurator.map: $(OBJS) $(USER_OBJS) C:\Users\tofan\Documents\CyberGearCANAngleDemo\stm32CyberGearCANAngleDemo\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "CyberGearConfigurator.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\tofan\Documents\CyberGearCANAngleDemo\stm32CyberGearCANAngleDemo\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="CyberGearConfigurator.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

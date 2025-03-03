@@ -91,8 +91,9 @@ volatile float targetAngle = 1.0f;  // initial target angle in radians
 
 // We'll define prototypes for param writes, enabling motor, etc.
 // We'll place the actual code in USER CODE BEGIN 4, but these must be declared first.
-HAL_StatusTypeDef writeParameter(uint16_t paramIndex, const void* paramValue,
+HAL_StatusTypeDef writeParameter(uint16_t paramIndex, const volatile void* paramValue,
                                  uint8_t hostID, uint8_t motorID);
+
 HAL_StatusTypeDef getMotorDeviceID(uint8_t hostID, uint8_t motorID);
 HAL_StatusTypeDef clearMotorFault(uint8_t hostID, uint8_t motorID);
 
@@ -462,8 +463,9 @@ static void MX_GPIO_Init(void)
  *   paramValue must point to 4 bytes (e.g. float).
  *   type=18 (0x12) in bits28..24
  */
-HAL_StatusTypeDef writeParameter(uint16_t paramIndex, const void* paramValue,
+HAL_StatusTypeDef writeParameter(uint16_t paramIndex, const volatile void* paramValue,
                                  uint8_t hostID, uint8_t motorID)
+
 {
     CAN_TxHeaderTypeDef txHeader;
     uint32_t txMailbox;
@@ -550,6 +552,8 @@ void runMITLoop(void)
     float velocityCmd = 0.0f;   // No feed-forward velocity
     float kp          = 30.0f;  // Proportional gain
     float kd          = 1.0f;   // Derivative gain
+
+
 
     // Continuously update control commands at roughly 100Hz.
     while (1)
@@ -787,12 +791,21 @@ void testMotor(void)
     motorEnable(/*hostID=*/0x00, /*motorID=*/0x7F);
     HAL_Delay(20);
 
+
+    // 2) Put motor in position mode
+    uint8_t runMode = 1; // 1 => position mode
+    writeParameter(0x7005, &runMode, /*hostID=*/0xFE, /*motorID=*/0x7F);
+
+
+    float speedLimit = 1.0f; // e.g. 1 rad/s
+    writeParameter(0x7017, &speedLimit, 0xFE, 0x7F);
+    HAL_Delay(10);
+
     // 3) Send repeated frames in a loop
     while(1)
     {
-        // For instance, torque=0, angle=+1.0 rad, velocity=0, kp=30, kd=1
-        motorControlFrame(/*motorID=*/0x7F, /*torque=*/0.0f, /*angle=*/angle_reference,
-                          /*velocity=*/0.0f, /*kp=*/30.0f, /*kd=*/1.0f);
+
+    	writeParameter(0x7016, &targetAngle, 0xFE, 0x7F);
 
         HAL_Delay(10); // ~100 Hz
     }
@@ -875,16 +888,17 @@ HAL_StatusTypeDef motorControlFrame(
     // bits 28..24 => type=1
     // bits 23..8  => torque_u
     // bits 7..0   => motorID
-    uint32_t extId = ((uint32_t)1 << 24)              // type=1
-                   | ((uint32_t)torque_u << 8)        // torque in bits 23..8
-                   | (uint32_t)motorID;               // motor ID in bits 7..0
+    uint32_t extId =
+        ((uint32_t)1 << 24)                // put "1" in bits 28..24
+      | ((uint32_t)torque_u & 0xFFFF) << 8 // put torque in bits 23..8
+      | ((uint32_t)motorID & 0xFF);        // put motorID in bits 7..0
 
     txHeader.ExtId = extId;
     txHeader.IDE   = CAN_ID_EXT;       // extended frame
     txHeader.RTR   = CAN_RTR_DATA;
     txHeader.DLC   = 8;               // 8 data bytes
     txHeader.TransmitGlobalTime = DISABLE;
-
+/*
     // 3) Scale angle, velocity, Kp, Kd for the data bytes
     uint16_t angle_u    = float_to_uint(angle,    -4.0f, 4.0f);    // or whatever range your doc says
     uint16_t velocity_u = float_to_uint(velocity, -30.0f, 30.0f);  // example range
@@ -907,9 +921,30 @@ HAL_StatusTypeDef motorControlFrame(
     // Byte6..7 => Kd
     txData[6] = (uint8_t)(kd_u >> 8);
     txData[7] = (uint8_t)(kd_u & 0xFF);
+    */
+    // We assume you want to match exactly Byte0..1 => angle, Byte2..3 => velocity, etc.
+    uint16_t p_u  = float_to_uint(angle,  -4.0f, 4.0f); // angle
+    uint16_t v_u  = float_to_uint(velocity,  -30.0f, 30.0f);
+    uint16_t kp_u = float_to_uint(kp,        0.0f, 500.0f);
+    uint16_t kd_u = float_to_uint(kd,        0.0f, 5.0f);
+
+    // Now place them in the correct order:
+    txData[0] = (uint8_t)(p_u >> 8);
+    txData[1] = (uint8_t)(p_u & 0xFF);
+
+    txData[2] = (uint8_t)(v_u >> 8);
+    txData[3] = (uint8_t)(v_u & 0xFF);
+
+    txData[4] = (uint8_t)(kp_u >> 8);
+    txData[5] = (uint8_t)(kp_u & 0xFF);
+
+    txData[6] = (uint8_t)(kd_u >> 8);
+    txData[7] = (uint8_t)(kd_u & 0xFF);
+
 
     // 5) Transmit
     return HAL_CAN_AddTxMessage(&hcan1, &txHeader, txData, &txMailbox);
+
 }
 
 /* USER CODE END 4 */
